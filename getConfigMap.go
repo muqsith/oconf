@@ -35,7 +35,7 @@ func getFlatMap(configFilePath, prefix string, m map[string]interface{}) map[str
 			if !filepath.IsAbs(includedFilePath) {
 				includedFilePath = filepath.Dir(configFilePath) + pathSep + includedFilePath
 			}
-			mapFromInclude := Config(includedFilePath)
+			mapFromInclude := GetConfig(includedFilePath)
 			mNew = copyConfigMap(mNew, mapFromInclude)
 		}
 		delete(m, "#include")
@@ -66,10 +66,10 @@ func getFlatMap(configFilePath, prefix string, m map[string]interface{}) map[str
 }
 
 /*
-Map gets the map of the final configuration. Keys are separated by dots
+ConfigMap returns the map of the final configuration. Keys are separated by dots
 Eg: dev.host.ip : 10.127.1.4
 */
-func Map(configFilePath string, data []byte) map[string]interface{} {
+func ConfigMap(configFilePath string, data []byte) map[string]interface{} {
 	var f interface{}
 	jsonErr := json.Unmarshal(data, &f)
 

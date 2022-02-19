@@ -5,14 +5,14 @@ import (
 	"log"
 )
 
-/*Config returns config key value map to be used by program*/
-func Config(configFilePath string) map[string]interface{} {
+/*GetConfig returns a map of config, use . for nested properties eg: address.country.city*/
+func GetConfig(configFilePath string) map[string]interface{} {
 	data, err := ioutil.ReadFile(configFilePath)
 	if err != nil {
 		log.Fatal(err)
 	}
 	noCommentsData := RemoveComments(data)
-	congigMap := Map(configFilePath, noCommentsData)
+	congigMap := ConfigMap(configFilePath, noCommentsData)
 
 	return congigMap
 }

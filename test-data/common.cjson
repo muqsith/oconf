@@ -1,0 +1,10 @@
+{
+  "country": "Germany", // country name
+  /*Name of the state in country*/
+  "state": "Baden-Wuttenberg",
+  // one of the city in the state
+  "city": "Hidelberg",
+  "year": 2010, // year of visit
+  "month": "November",
+  "temperature": 13.9 // in celsius
+}
