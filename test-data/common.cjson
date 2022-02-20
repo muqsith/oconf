@@ -6,5 +6,16 @@
   "city": "Hidelberg",
   "year": 2010, // year of visit
   "month": "November",
-  "temperature": 13.9 // in celsius
+  "temperature": 13.9, // in celsius
+  "geometryBox": {
+    "contents": {
+      "compass": "1cm - 7cm",
+      "protractor": "180 degrees",
+      "pencil": {
+        "color#public": "black",
+        "thickness": "2mm"
+      }
+    },
+    "label": "Stadler"
+  }
 }
