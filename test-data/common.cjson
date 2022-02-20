@@ -1,12 +1,19 @@
 {
   "country": "Germany", // country name
   /*Name of the state in country*/
-  "state": "Baden-Wuttenberg",
+  "state#public": "Baden-Wuttenberg",
   // one of the city in the state
   "city": "Hidelberg",
   "year": 2010, // year of visit
   "month": "November",
   "temperature": 13.9, // in celsius
+  "bag": {
+    "fruits": "apples",
+    "veggies#public": {
+      "leafy": ["spinach", "basil"],
+      "others": "potatoes"
+    }
+  },
   "geometryBox": {
     "contents": {
       "compass": "1cm - 7cm",

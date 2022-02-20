@@ -1,9 +1,9 @@
-package getconfig
+package oconf
 
 /*
-RemoveComments removes comments from cjson file
+removeComments removes comments from cjson file
 */
-func RemoveComments(data []byte) []byte {
+func removeComments(data []byte) []byte {
 	// stop for single-line comment
 	stopforslc := false
 	// stop for multi-line comment

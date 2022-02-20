@@ -1,5 +1,5 @@
 {
   /*the files that are loaded first are more specific*/
-  "#include": ["sample.cjson"],
+  "#include": ["sample.cjson", "sample2.cjson"],
   "city": "Walldorf" // this value is taken instead of the one in common.cjson
 }
