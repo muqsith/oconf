@@ -9,6 +9,6 @@
 
 
 #### Things not supported now
-- relaxed JSON
-- Doesn't throw error when conflict on public (#public) attributes
+- Relaxed JSON
+- Error when conflict on public (#public) attributes
 
