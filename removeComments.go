@@ -41,27 +41,27 @@ func removeComments(data []byte) []byte {
 		slcstart[0] = slcstart[1]
 		slcstart[1] = slcstart[2]
 		slcstart[2] = c
-		if !quotestart && quoteend && slcstart[0] == '/' && slcstart[1] == '/' {
+		if !stopforslc && !quotestart && quoteend && slcstart[0] == '/' && slcstart[1] == '/' {
 			stopforslc = true
 			j -= 2
 		}
 		slcend[0] = slcend[1]
 		slcend[1] = c
-		if !quotestart && quoteend && (slcend[0] == '\n' || slcend[0] == '\r') {
+		if stopforslc && !quotestart && quoteend && (slcend[0] == '\n' || slcend[0] == '\r') {
 			stopforslc = false
 		}
 
 		mlcstart[0] = mlcstart[1]
 		mlcstart[1] = mlcstart[2]
 		mlcstart[2] = c
-		if !quotestart && quoteend && mlcstart[0] == '/' && mlcstart[1] == '*' {
+		if !stopformlc && !quotestart && quoteend && mlcstart[0] == '/' && mlcstart[1] == '*' {
 			stopformlc = true
 			j -= 2
 		}
 		mlcend[0] = mlcend[1]
 		mlcend[1] = mlcend[2]
 		mlcend[2] = c
-		if !quotestart && quoteend && mlcend[0] == '*' && mlcend[1] == '/' {
+		if stopformlc && !quotestart && quoteend && mlcend[0] == '*' && mlcend[1] == '/' {
 			stopformlc = false
 		}
 

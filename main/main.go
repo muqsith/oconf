@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/muqsith/oconf/oconf"
+	"github.com/muqsith/oconf"
 )
 
 func main() {

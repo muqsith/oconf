@@ -1,3 +1,7 @@
 PHONY: build
 build:
-	go build -o ./bin/oconf
+	cd main && go build -o ../bin/oconf
+
+PHONY: install
+install:
+	cd main && go build -o ${GOPATH}/bin/oconf

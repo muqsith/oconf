@@ -92,6 +92,13 @@ func TestGetFlatConfig(t *testing.T) {
 	assert.Equal(t, true, len(publicConfigString) > 0)
 }
 
+// go test -run TestGetConfigAsJSONString2
+// func TestGetConfigAsJSONString2(t *testing.T) {
+// 	configJsonString := GetConfigAsJSONString("./tmp/config/development.cjson")
+// 	fmt.Println(configJsonString)
+// 	assert.Equal(t, true, len(configJsonString) > 0)
+// }
+
 // go test -run TestBadConfig
 func TestBadConfig(t *testing.T) {
 	defer func() {
