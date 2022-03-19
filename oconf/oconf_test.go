@@ -91,3 +91,13 @@ func TestGetFlatConfig(t *testing.T) {
 	fmt.Println(publicConfigString)
 	assert.Equal(t, true, len(publicConfigString) > 0)
 }
+
+// go test -run TestBadConfig
+func TestBadConfig(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			GetFlatConfig("./test-data/bad.cjson")
+			fmt.Println("Recovered from: ", r)
+		}
+	}()
+}
