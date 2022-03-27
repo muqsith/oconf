@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 func isMap(v interface{}) bool {
@@ -32,9 +33,9 @@ func saveOnlyWithPublicAnnotations(configMap map[string]interface{}) {
 			if !strings.Contains(key, "#public") {
 				delete(configMap, key)
 			}
-		} 
+		}
 
-		if isMap(val) && !strings.Contains(key, "#public"){
+		if isMap(val) && !strings.Contains(key, "#public") {
 			subMap := val.(map[string]interface{})
 			saveOnlyWithPublicAnnotations(subMap)
 			if len(subMap) == 0 {
@@ -66,4 +67,18 @@ func createFlatMap(prefix string, newMap, configMap map[string]interface{}) {
 			log.Fatalf("Key:%s has value of a %T type I don't know how to handle", k, vv)
 		}
 	}
+}
+
+func parseDate(date string) time.Time {
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return t
+}
+
+func calculateDaysBetweenDates(startDate, endDate string) int {
+	startDateTime := parseDate(startDate)
+	endDateTime := parseDate(endDate)
+	return int(endDateTime.Sub(startDateTime).Hours() / 24)
 }
