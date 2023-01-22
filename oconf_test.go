@@ -9,9 +9,9 @@ import (
 
 // remember to add -t 0 flag  like below
 // go test -timeout 0 -run TestGetConfig
-// go test -run TestGetConfig
-func TestGetConfig(t *testing.T) {
-	if configMap := GetConfig("./test-data/specific.cjson"); len(configMap) == 0 {
+// go test -run TestGetConfig1
+func TestGetConfig1(t *testing.T) {
+	if configMap := GetConfig("test-data/specific.cjson"); len(configMap) == 0 {
 		t.Error("Not your config")
 	} else {
 		fmt.Printf("Map size: %d\n", len(configMap))
@@ -98,6 +98,19 @@ func TestGetFlatConfig(t *testing.T) {
 // 	fmt.Println(configJsonString)
 // 	assert.Equal(t, true, len(configJsonString) > 0)
 // }
+
+// go test -run TestGetConfigSubDir
+func TestGetConfigSubDir(t *testing.T) {
+	if configMap := GetConfig("./test-data/sub1-dir/sub2-dir2/ref1.cjson"); len(configMap) == 0 {
+		t.Error("Not your config")
+	} else {
+		fmt.Printf("Map size: %d\n", len(configMap))
+		for k, v := range configMap {
+			fmt.Printf("Key: %s, Value: %v\n", k, v)
+		}
+		assert.Equal(t, "Hidelberg", configMap["city"])
+	}
+}
 
 // go test -run TestBadConfig
 func TestBadConfig(t *testing.T) {

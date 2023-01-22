@@ -2,10 +2,11 @@ package oconf
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 func getFromIncludes(dirPrefix string, includedFiles []interface{}) map[string]interface{} {
@@ -14,7 +15,12 @@ func getFromIncludes(dirPrefix string, includedFiles []interface{}) map[string]i
 	for _, includedFile := range includedFiles {
 		includedFilePath := includedFile.(string)
 		if !filepath.IsAbs(includedFilePath) {
-			includedFilePath = dirPrefix + pathSep + includedFilePath
+			if strings.Contains(includedFilePath, pathSep) {
+				includedFilePath = path.Join(dirPrefix, includedFilePath)
+				dirPrefix = filepath.Dir(includedFilePath)
+			} else {
+				includedFilePath = dirPrefix + pathSep + includedFilePath
+			}
 		}
 		if !isFileLoaded(includedFilePath) {
 			noCommentsData := getFileDataWithoutComments(includedFilePath)
@@ -30,7 +36,7 @@ func getFromIncludes(dirPrefix string, includedFiles []interface{}) map[string]i
 }
 
 func getFileDataWithoutComments(configFilePath string) []byte {
-	data, err := ioutil.ReadFile(configFilePath)
+	data, err := os.ReadFile(configFilePath)
 	if err != nil {
 		log.Fatal(err)
 	}

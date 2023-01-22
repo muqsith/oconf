@@ -1,0 +1,6 @@
+{
+    "#include": ["../../sample.cjson"],
+    "river": "tunga-badra",
+    "year": 2012,
+    "future": true
+  }
