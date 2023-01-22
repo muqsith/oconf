@@ -14,7 +14,9 @@ func getFromIncludes(dirPrefix string, includedFiles []interface{}) map[string]i
 	mNew := make(map[string]interface{})
 	for _, includedFile := range includedFiles {
 		includedFilePath := includedFile.(string)
-		if !filepath.IsAbs(includedFilePath) {
+		if filepath.IsAbs(includedFilePath) {
+			dirPrefix = filepath.Dir(includedFilePath)
+		} else {
 			if strings.Contains(includedFilePath, pathSep) {
 				includedFilePath = path.Join(dirPrefix, includedFilePath)
 				dirPrefix = filepath.Dir(includedFilePath)
