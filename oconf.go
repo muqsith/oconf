@@ -75,3 +75,13 @@ func GetPublicConfigAsJSONString(configFilePath string) string {
 	}
 	return string(jsonBytes)
 }
+
+/*GetFlatPublicConfig returns a map of public config with nested values separated by dot eg: pin := map["country.city.pin"]*/
+func GetFlatPublicConfig(configFilePath string) map[string]interface{} {
+	result := getAllConfig(configFilePath)
+	saveOnlyWithPublicAnnotations(result)
+	removePublicAnnotations(result)
+	flatMap := make(map[string]interface{})
+	createFlatMap("", flatMap, result)
+	return flatMap
+}
