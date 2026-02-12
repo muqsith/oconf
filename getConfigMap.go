@@ -2,70 +2,171 @@ package oconf
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 )
 
-func getFromIncludes(dirPrefix string, includedFiles []interface{}) map[string]interface{} {
-	pathSep := string(os.PathSeparator)
-	mNew := make(map[string]interface{})
-	for _, includedFile := range includedFiles {
-		includedFilePath := includedFile.(string)
-		if filepath.IsAbs(includedFilePath) {
-			dirPrefix = filepath.Dir(includedFilePath)
-		} else {
-			if strings.Contains(includedFilePath, pathSep) {
-				includedFilePath = path.Join(dirPrefix, includedFilePath)
-				dirPrefix = filepath.Dir(includedFilePath)
-			} else {
-				includedFilePath = dirPrefix + pathSep + includedFilePath
-			}
-		}
-		if !isFileLoaded(includedFilePath) {
-			noCommentsData := getFileDataWithoutComments(includedFilePath)
-			mapFromInclude := getConfigMap(dirPrefix, noCommentsData)
-			if len(mNew) > 1 {
-				mNew = getMergedMap(mNew, mapFromInclude)
-			} else {
-				mNew = mapFromInclude
-			}
-		}
-	}
-	return mNew
+// loadContext tracks files that have been loaded to prevent circular includes
+type loadContext struct {
+	loadedFiles map[string]bool
 }
 
-func getFileDataWithoutComments(configFilePath string) []byte {
+// newLoadContext creates a new context for tracking loaded files
+func newLoadContext() *loadContext {
+	return &loadContext{
+		loadedFiles: make(map[string]bool),
+	}
+}
+
+// markFileLoaded marks a file as loaded in the context
+func (ctx *loadContext) markFileLoaded(filePath string) {
+	ctx.loadedFiles[filePath] = true
+}
+
+// isFileLoaded checks if a file has already been loaded
+func (ctx *loadContext) isFileLoaded(filePath string) bool {
+	return ctx.loadedFiles[filePath]
+}
+
+// getFromIncludes processes the #include directive and loads referenced files
+// It returns a merged configuration from all included files
+func getFromIncludes(ctx *loadContext, dirPrefix string, includedFiles []interface{}) (map[string]interface{}, error) {
+	mergedConfig := make(map[string]interface{})
+
+	for i, includeEntry := range includedFiles {
+		// Safely assert the type
+		includedFilePath, ok := includeEntry.(string)
+		if !ok {
+			return nil, &TypeError{
+				Key:      fmt.Sprintf("%s[%d]", IncludeKey, i),
+				Expected: "string",
+				Actual:   fmt.Sprintf("%T", includeEntry),
+			}
+		}
+
+		// Resolve the file path
+		resolvedPath, resolvedDir, err := resolveIncludePath(dirPrefix, includedFilePath)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check for circular includes
+		if ctx.isFileLoaded(resolvedPath) {
+			continue // Skip already loaded files
+		}
+
+		// Load and parse the included file
+		includeConfig, err := loadConfigFile(ctx, resolvedDir, resolvedPath)
+		if err != nil {
+			return nil, &FileError{
+				Path: resolvedPath,
+				Op:   "include",
+				Err:  err,
+			}
+		}
+
+		// Merge the included configuration
+		// Fixed: Changed len(mergedConfig) > 1 to > 0
+		if len(mergedConfig) > 0 {
+			mergedConfig = getMergedMap(mergedConfig, includeConfig)
+		} else {
+			mergedConfig = includeConfig
+		}
+	}
+
+	return mergedConfig, nil
+}
+
+// resolveIncludePath resolves an include path relative to the current directory
+// Returns the absolute file path and the directory containing it
+func resolveIncludePath(currentDir, includePath string) (absPath string, dir string, err error) {
+	if filepath.IsAbs(includePath) {
+		// Absolute path - use as-is
+		return includePath, filepath.Dir(includePath), nil
+	}
+
+	// Relative path - resolve relative to current directory
+	absPath = filepath.Join(currentDir, includePath)
+	absPath = filepath.Clean(absPath)
+	dir = filepath.Dir(absPath)
+
+	return absPath, dir, nil
+}
+
+// getFileDataWithoutComments reads a file and removes all comments
+func getFileDataWithoutComments(configFilePath string) ([]byte, error) {
 	data, err := os.ReadFile(configFilePath)
 	if err != nil {
-		log.Fatal(err)
+		return nil, &FileError{
+			Path: configFilePath,
+			Op:   "read",
+			Err:  err,
+		}
 	}
+
 	noCommentsData := removeComments(data)
-	return noCommentsData
+	return noCommentsData, nil
 }
 
-/*
-getConfigMap returns the map. If `returnFlatMap` is true then it returns map with nested keys separated by dots.
-Eg: dev.host.ip : 10.127.1.4
-*/
-func getConfigMap(dirPrefix string, data []byte) map[string]interface{} {
-	var result map[string]interface{}
-	var f interface{}
-	jsonErr := json.Unmarshal(data, &f)
+// getConfigMap parses JSON data and processes any #include directives
+// It returns a merged configuration map
+func getConfigMap(ctx *loadContext, dirPrefix string, data []byte) (map[string]interface{}, error) {
+	var parsedData interface{}
 
-	if jsonErr != nil {
-		log.Fatal(jsonErr)
+	// Parse the JSON data
+	if err := json.Unmarshal(data, &parsedData); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidJSON, err)
 	}
 
-	result = f.(map[string]interface{})
-	includes, ok := result["#include"]
-	if ok {
-		includedFiles := includes.([]interface{})
-		includesConfig := getFromIncludes(dirPrefix, includedFiles)
-		result = getMergedMap(includesConfig, result)
-		delete(result, "#include")
+	// Ensure the root is an object
+	configMap, ok := parsedData.(map[string]interface{})
+	if !ok {
+		return nil, &TypeError{
+			Expected: "object (map)",
+			Actual:   fmt.Sprintf("%T", parsedData),
+		}
 	}
-	return result
+
+	// Process #include directive if present
+	if includes, ok := configMap[IncludeKey]; ok {
+		// Ensure includes is an array
+		includedFiles, ok := includes.([]interface{})
+		if !ok {
+			return nil, &TypeError{
+				Key:      IncludeKey,
+				Expected: "array",
+				Actual:   fmt.Sprintf("%T", includes),
+			}
+		}
+
+		// Load all included files
+		includesConfig, err := getFromIncludes(ctx, dirPrefix, includedFiles)
+		if err != nil {
+			return nil, err
+		}
+
+		// Merge: included files first, then current file (current file overrides)
+		configMap = getMergedMap(includesConfig, configMap)
+
+		// Remove the #include directive from the final result
+		delete(configMap, IncludeKey)
+	}
+
+	return configMap, nil
+}
+
+// loadConfigFile loads and parses a configuration file
+func loadConfigFile(ctx *loadContext, dirPrefix, filePath string) (map[string]interface{}, error) {
+	// Mark this file as loaded to prevent circular includes
+	ctx.markFileLoaded(filePath)
+
+	// Read and strip comments
+	data, err := getFileDataWithoutComments(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the configuration
+	return getConfigMap(ctx, dirPrefix, data)
 }

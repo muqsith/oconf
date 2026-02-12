@@ -1,75 +1,121 @@
 package oconf
 
-/*
-removeComments removes comments from cjson file
-*/
+// removeComments removes C-style comments from CJSON (JSON with comments) data.
+// It handles both single-line comments (//) and multi-line comments (/* */).
+// Comments inside quoted strings are preserved.
+//
+// The algorithm maintains state machines to track:
+//   - Whether we're inside a quoted string
+//   - Whether we're inside a single-line comment
+//   - Whether we're inside a multi-line comment
+//
+// This implementation is careful to handle edge cases like:
+//   - Quotes inside comments
+//   - Comment markers inside strings
+//   - Nested comment-like patterns
 func removeComments(data []byte) []byte {
-	// stop for single-line comment
-	stopforslc := false
-	// stop for multi-line comment
-	stopformlc := false
+	// State flags
+	var (
+		inSingleLineComment = false // Currently inside a // comment
+		inMultiLineComment  = false // Currently inside a /* */ comment
+		inString            = false // Currently inside a quoted string
+	)
 
-	quotestart := false
-	quoteend := true
+	// Sliding windows to detect comment markers and quotes
+	var (
+		// For detecting single-line comment start (//)
+		singleLineCommentStart = [3]byte{0, 0, 0}
 
-	// single-line comment start
-	slcstart := []byte{0, 0, 0}
-	// single-line commment end
-	slcend := []byte{0, 0}
-	// multi-line comment start
-	mlcstart := []byte{0, 0, 0}
-	// multi-line comment end
-	mlcend := []byte{0, 0, 0}
-	// quote
-	quotes := []byte{0, 0}
+		// For detecting single-line comment end (newline)
+		singleLineCommentEnd = [2]byte{0, 0}
 
-	dataSize := len(data)
-	dataCopy := make([]byte, dataSize)
+		// For detecting multi-line comment start (/*)
+		multiLineCommentStart = [3]byte{0, 0, 0}
 
-	j := 0
+		// For detecting multi-line comment end (*/)
+		multiLineCommentEnd = [3]byte{0, 0, 0}
 
-	for _, c := range data {
+		// For detecting quote characters
+		quoteWindow = [2]byte{0, 0}
+	)
 
-		quotes[0] = quotes[1]
-		quotes[1] = c
+	// Allocate output buffer (will be <= input size)
+	output := make([]byte, len(data))
+	outputPos := 0
 
-		if quotes[0] == '"' && (!stopforslc && !stopformlc) {
-			quotestart = quoteend
-			quoteend = !quotestart
+	for _, currentByte := range data {
+		// Shift quote window
+		quoteWindow[0] = quoteWindow[1]
+		quoteWindow[1] = currentByte
+
+		// Track string state: toggle when we see a non-escaped quote
+		// Only toggle if we're not already in a comment
+		if quoteWindow[0] != '\\' && quoteWindow[1] == '"' && !inSingleLineComment && !inMultiLineComment {
+			inString = !inString
 		}
 
-		slcstart[0] = slcstart[1]
-		slcstart[1] = slcstart[2]
-		slcstart[2] = c
-		if !stopforslc && !quotestart && quoteend && slcstart[0] == '/' && slcstart[1] == '/' {
-			stopforslc = true
-			j -= 2
-		}
-		slcend[0] = slcend[1]
-		slcend[1] = c
-		if stopforslc && !quotestart && quoteend && (slcend[0] == '\n' || slcend[0] == '\r') {
-			stopforslc = false
+		// Only process comment markers if we're not in a string
+		if !inString {
+			// Check for single-line comment start (//)
+			singleLineCommentStart[0] = singleLineCommentStart[1]
+			singleLineCommentStart[1] = singleLineCommentStart[2]
+			singleLineCommentStart[2] = currentByte
+
+			if !inSingleLineComment && !inMultiLineComment &&
+				singleLineCommentStart[1] == '/' && singleLineCommentStart[2] == '/' {
+				inSingleLineComment = true
+				// Remove the two '/' characters we just added
+				outputPos -= 2
+				if outputPos < 0 {
+					outputPos = 0
+				}
+			}
+
+			// Check for single-line comment end (newline)
+			singleLineCommentEnd[0] = singleLineCommentEnd[1]
+			singleLineCommentEnd[1] = currentByte
+
+			if inSingleLineComment && (singleLineCommentEnd[1] == '\n' || singleLineCommentEnd[1] == '\r') {
+				inSingleLineComment = false
+				// Keep the newline character
+				output[outputPos] = currentByte
+				outputPos++
+				continue
+			}
+
+			// Check for multi-line comment start (/*)
+			multiLineCommentStart[0] = multiLineCommentStart[1]
+			multiLineCommentStart[1] = multiLineCommentStart[2]
+			multiLineCommentStart[2] = currentByte
+
+			if !inMultiLineComment && !inSingleLineComment &&
+				multiLineCommentStart[1] == '/' && multiLineCommentStart[2] == '*' {
+				inMultiLineComment = true
+				// Remove the '/' and '*' characters
+				outputPos -= 2
+				if outputPos < 0 {
+					outputPos = 0
+				}
+			}
+
+			// Check for multi-line comment end (*/)
+			multiLineCommentEnd[0] = multiLineCommentEnd[1]
+			multiLineCommentEnd[1] = multiLineCommentEnd[2]
+			multiLineCommentEnd[2] = currentByte
+
+			if inMultiLineComment &&
+				multiLineCommentEnd[1] == '*' && multiLineCommentEnd[2] == '/' {
+				inMultiLineComment = false
+				continue
+			}
 		}
 
-		mlcstart[0] = mlcstart[1]
-		mlcstart[1] = mlcstart[2]
-		mlcstart[2] = c
-		if !stopformlc && !quotestart && quoteend && mlcstart[0] == '/' && mlcstart[1] == '*' {
-			stopformlc = true
-			j -= 2
-		}
-		mlcend[0] = mlcend[1]
-		mlcend[1] = mlcend[2]
-		mlcend[2] = c
-		if stopformlc && !quotestart && quoteend && mlcend[0] == '*' && mlcend[1] == '/' {
-			stopformlc = false
-		}
-
-		if !stopforslc && !stopformlc {
-			dataCopy[j] = c
-			j++
+		// Copy byte to output if we're not in a comment
+		if !inSingleLineComment && !inMultiLineComment {
+			output[outputPos] = currentByte
+			outputPos++
 		}
 	}
 
-	return dataCopy[0:j]
+	return output[:outputPos]
 }

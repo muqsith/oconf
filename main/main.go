@@ -10,8 +10,14 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatalf("Please provide valid config file path")
+		log.Fatal("Please provide valid config file path")
 	}
+
 	configFilePath := os.Args[1]
-	fmt.Println(oconf.GetConfigAsJSONString(configFilePath))
+	jsonString, err := oconf.GetConfigAsJSONString(configFilePath)
+	if err != nil {
+		log.Fatalf("Error loading config: %v", err)
+	}
+
+	fmt.Println(jsonString)
 }

@@ -2,24 +2,26 @@ package oconf
 
 import (
 	"fmt"
-	"log"
 	"strings"
-	"time"
 )
 
+// isMap checks if the given value is a map[string]interface{}
 func isMap(v interface{}) bool {
-	result := v != nil
-	t := fmt.Sprintf("%T", v)
-	result = result && strings.Contains(t, "map[string]")
-	return result
+	if v == nil {
+		return false
+	}
+	_, ok := v.(map[string]interface{})
+	return ok
 }
 
+// removePublicAnnotations removes the PublicKey annotation from all keys in the map recursively
 func removePublicAnnotations(configMap map[string]interface{}) {
 	for key, val := range configMap {
-		if strings.Contains(key, "#public") {
-			newKey := strings.Replace(key, "#public", "", -1)
+		if strings.Contains(key, PublicKey) {
+			newKey := strings.ReplaceAll(key, PublicKey, "")
 			delete(configMap, key)
 			configMap[newKey] = val
+			key = newKey
 		}
 		if isMap(val) {
 			removePublicAnnotations(val.(map[string]interface{}))
@@ -27,58 +29,50 @@ func removePublicAnnotations(configMap map[string]interface{}) {
 	}
 }
 
+// saveOnlyWithPublicAnnotations removes all keys that don't have the PublicKey annotation
+// It recursively processes nested maps and removes empty maps after filtering
 func saveOnlyWithPublicAnnotations(configMap map[string]interface{}) {
 	for key, val := range configMap {
 		if !isMap(val) {
-			if !strings.Contains(key, "#public") {
+			if !strings.Contains(key, PublicKey) {
 				delete(configMap, key)
 			}
-		}
-
-		if isMap(val) && !strings.Contains(key, "#public") {
+		} else {
 			subMap := val.(map[string]interface{})
 			saveOnlyWithPublicAnnotations(subMap)
-			if len(subMap) == 0 {
+
+			// Remove the parent key if it doesn't have PublicKey annotation and is now empty
+			if !strings.Contains(key, PublicKey) && len(subMap) == 0 {
 				delete(configMap, key)
 			}
 		}
-
 	}
 }
 
-func createFlatMap(prefix string, newMap, configMap map[string]interface{}) {
-	for k, v := range configMap {
-		keyPrefix := prefix
-		if len(prefix) > 0 {
-			keyPrefix = fmt.Sprintf("%s%s", prefix, ".")
+// createFlatMap converts a nested map into a flat map where nested keys are joined with dots
+// For example: {"a": {"b": "value"}} becomes {"a.b": "value"}
+func createFlatMap(prefix string, flatMap, nestedMap map[string]interface{}) error {
+	for key, value := range nestedMap {
+		// Build the full key with dot notation
+		fullKey := key
+		if prefix != "" {
+			fullKey = prefix + "." + key
 		}
-		key := fmt.Sprintf("%s%s", keyPrefix, k)
 
-		switch vv := v.(type) {
-		case string, float64, bool, []interface{}:
-			{
-				newMap[key] = v
-			}
-		case interface{}:
-			{
-				createFlatMap(key, newMap, v.(map[string]interface{}))
+		switch v := value.(type) {
+		case string, float64, bool, nil, []interface{}:
+			flatMap[fullKey] = value
+		case map[string]interface{}:
+			if err := createFlatMap(fullKey, flatMap, v); err != nil {
+				return err
 			}
 		default:
-			log.Fatalf("Key:%s has value of a %T type I don't know how to handle", k, vv)
+			return &TypeError{
+				Key:      fullKey,
+				Expected: "string, number, bool, array, or object",
+				Actual:   fmt.Sprintf("%T", v),
+			}
 		}
 	}
-}
-
-func parseDate(date string) time.Time {
-	t, err := time.Parse("2006-01-02", date)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return t
-}
-
-func calculateDaysBetweenDates(startDate, endDate string) int {
-	startDateTime := parseDate(startDate)
-	endDateTime := parseDate(endDate)
-	return int(endDateTime.Sub(startDateTime).Hours() / 24)
+	return nil
 }
