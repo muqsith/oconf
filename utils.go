@@ -32,17 +32,33 @@ func removePublicAnnotations(configMap map[string]interface{}) {
 // saveOnlyWithPublicAnnotations removes all keys that don't have the PublicKey annotation
 // It recursively processes nested maps and removes empty maps after filtering
 func saveOnlyWithPublicAnnotations(configMap map[string]interface{}) {
+	saveOnlyWithPublicAnnotationsHelper(configMap, false)
+}
+
+// saveOnlyWithPublicAnnotationsHelper is the recursive implementation that tracks whether
+// we are already inside a public subtree (insidePublic). When insidePublic is true, all
+// children are kept unconditionally since they belong to a parent marked as public.
+func saveOnlyWithPublicAnnotationsHelper(configMap map[string]interface{}, insidePublic bool) {
 	for key, val := range configMap {
-		if !isMap(val) {
-			if !strings.Contains(key, PublicKey) {
+		keyIsPublic := strings.Contains(key, PublicKey)
+
+		if insidePublic {
+			// Already inside a public subtree — keep everything, just recurse into submaps
+			if isMap(val) {
+				saveOnlyWithPublicAnnotationsHelper(val.(map[string]interface{}), true)
+			}
+		} else if !isMap(val) {
+			// Non-map value outside a public subtree: keep only if key is marked public
+			if !keyIsPublic {
 				delete(configMap, key)
 			}
 		} else {
 			subMap := val.(map[string]interface{})
-			saveOnlyWithPublicAnnotations(subMap)
+			// If this key is public, all its children are implicitly public
+			saveOnlyWithPublicAnnotationsHelper(subMap, keyIsPublic)
 
-			// Remove the parent key if it doesn't have PublicKey annotation and is now empty
-			if !strings.Contains(key, PublicKey) && len(subMap) == 0 {
+			// Remove the parent key if it's not public and its subtree is now empty
+			if !keyIsPublic && len(subMap) == 0 {
 				delete(configMap, key)
 			}
 		}

@@ -89,6 +89,15 @@ func TestGetPublicConfig(t *testing.T) {
 
 	fmt.Printf("Map size: %d\n", len(publicConfigMap))
 	assert.Equal(t, "Baden-Wuttenberg", publicConfigMap["state"])
+
+	// Verify that arrays inside a #public parent are included (regression test)
+	bag, ok := publicConfigMap["bag"].(map[string]interface{})
+	require.True(t, ok, "bag should be present in public config")
+	veggies, ok := bag["veggies"].(map[string]interface{})
+	require.True(t, ok, "veggies should be present under bag in public config")
+	leafy, ok := veggies["leafy"].([]interface{})
+	require.True(t, ok, "leafy array should be present inside veggies#public")
+	assert.Equal(t, []interface{}{"spinach", "basil"}, leafy)
 }
 
 // TestGetPublicConfigAsJSONString tests public config as JSON string
