@@ -351,6 +351,33 @@ if err != nil {
 }
 ```
 
+## Publishing a New Version
+
+### 1. Run the tests
+
+```bash
+go test ./... -v -count=1
+```
+
+### 2. Tag and push
+
+```bash
+git fetch --all --tags   # sync existing tags
+git tag -l               # verify the next version
+git tag v1.x.y
+git push origin v1.x.y
+```
+
+### 3. Force the proxy to index the new version
+
+```bash
+GOPROXY=proxy.golang.org go list -m github.com/muqsith/oconf@v1.x.y
+```
+
+Then verify the release is live at https://pkg.go.dev/github.com/muqsith/oconf.
+
+---
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
