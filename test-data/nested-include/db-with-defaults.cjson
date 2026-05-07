@@ -1,0 +1,5 @@
+{
+  "#include": ["conn-defaults.cjson"],
+  "host": "db.example.com",
+  "port": 5432
+}

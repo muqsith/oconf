@@ -1,0 +1,5 @@
+{
+  "host": "db.example.com",
+  "port": 5432,
+  "name": "mydb"
+}

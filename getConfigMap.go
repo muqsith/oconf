@@ -109,28 +109,11 @@ func getFileDataWithoutComments(configFilePath string) ([]byte, error) {
 	return noCommentsData, nil
 }
 
-// getConfigMap parses JSON data and processes any #include directives
-// It returns a merged configuration map
-func getConfigMap(ctx *loadContext, dirPrefix string, data []byte) (map[string]interface{}, error) {
-	var parsedData interface{}
-
-	// Parse the JSON data
-	if err := json.Unmarshal(data, &parsedData); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidJSON, err)
-	}
-
-	// Ensure the root is an object
-	configMap, ok := parsedData.(map[string]interface{})
-	if !ok {
-		return nil, &TypeError{
-			Expected: "object (map)",
-			Actual:   fmt.Sprintf("%T", parsedData),
-		}
-	}
-
-	// Process #include directive if present
-	if includes, ok := configMap[IncludeKey]; ok {
-		// Ensure includes is an array
+// processIncludes resolves #include directives at the current map level and recursively
+// in all nested objects. Included files' keys are merged in first; the current map's
+// keys override them. Returns the updated map with all includes resolved.
+func processIncludes(ctx *loadContext, dirPrefix string, m map[string]interface{}) (map[string]interface{}, error) {
+	if includes, ok := m[IncludeKey]; ok {
 		includedFiles, ok := includes.([]interface{})
 		if !ok {
 			return nil, &TypeError{
@@ -140,20 +123,48 @@ func getConfigMap(ctx *loadContext, dirPrefix string, data []byte) (map[string]i
 			}
 		}
 
-		// Load all included files
 		includesConfig, err := getFromIncludes(ctx, dirPrefix, includedFiles)
 		if err != nil {
 			return nil, err
 		}
 
-		// Merge: included files first, then current file (current file overrides)
-		configMap = getMergedMap(includesConfig, configMap)
-
-		// Remove the #include directive from the final result
-		delete(configMap, IncludeKey)
+		m = getMergedMap(includesConfig, m)
+		delete(m, IncludeKey)
 	}
 
-	return configMap, nil
+	for key, value := range m {
+		nestedMap, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		processed, err := processIncludes(ctx, dirPrefix, nestedMap)
+		if err != nil {
+			return nil, fmt.Errorf("at key '%s': %w", key, err)
+		}
+		m[key] = processed
+	}
+
+	return m, nil
+}
+
+// getConfigMap parses JSON data and processes any #include directives
+// It returns a merged configuration map
+func getConfigMap(ctx *loadContext, dirPrefix string, data []byte) (map[string]interface{}, error) {
+	var parsedData interface{}
+
+	if err := json.Unmarshal(data, &parsedData); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidJSON, err)
+	}
+
+	configMap, ok := parsedData.(map[string]interface{})
+	if !ok {
+		return nil, &TypeError{
+			Expected: "object (map)",
+			Actual:   fmt.Sprintf("%T", parsedData),
+		}
+	}
+
+	return processIncludes(ctx, dirPrefix, configMap)
 }
 
 // loadConfigFile loads and parses a configuration file

@@ -1,0 +1,6 @@
+{
+  "#include": ["server.cjson"],
+  "database": {
+    "#include": ["db.cjson"]
+  }
+}

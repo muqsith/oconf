@@ -1,0 +1,5 @@
+{
+  "host": "api.example.com",
+  "port": 8080,
+  "tls": true
+}

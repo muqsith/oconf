@@ -1,0 +1,6 @@
+{
+  "app": "myapp",
+  "services": {
+    "#include": ["db.cjson", "cache.cjson"]
+  }
+}

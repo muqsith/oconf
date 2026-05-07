@@ -1,0 +1,10 @@
+{
+  "app": "myapp",
+  "database": {
+    "#include": ["db.cjson"]
+  },
+  "server": {
+    "#include": ["server.cjson"],
+    "port": 9000
+  }
+}

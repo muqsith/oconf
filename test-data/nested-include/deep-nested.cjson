@@ -1,0 +1,8 @@
+{
+  "app": "myapp",
+  "services": {
+    "backend": {
+      "#include": ["db.cjson"]
+    }
+  }
+}

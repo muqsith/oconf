@@ -1,0 +1,6 @@
+{
+  "app": "myapp",
+  "database": {
+    "#include": ["db-with-defaults.cjson"]
+  }
+}

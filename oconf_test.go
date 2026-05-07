@@ -1,7 +1,9 @@
 package oconf
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -219,4 +221,157 @@ func TestIsMap(t *testing.T) {
 	assert.False(t, isMap(42))
 	assert.False(t, isMap(nil))
 	assert.False(t, isMap([]interface{}{}))
+}
+
+// TestNestedIncludeSingle tests a single #include inside a nested object.
+// Keys in the nested object override keys from the included file.
+// Run with: go test -run TestNestedIncludeSingle
+func TestNestedIncludeSingle(t *testing.T) {
+	configMap, err := GetConfig("./test-data/nested-include/single-nested.cjson")
+	require.NoError(t, err)
+
+	assert.Equal(t, "myapp", configMap["app"])
+
+	db, ok := configMap["database"].(map[string]interface{})
+	require.True(t, ok, "database should be a map")
+	assert.Equal(t, "db.example.com", db["host"])
+	assert.Equal(t, float64(5432), db["port"])
+	// "name" in the nested object overrides the included file's "name"
+	assert.Equal(t, "override-db", db["name"])
+}
+
+// TestNestedIncludeMultipleFiles tests merging multiple files inside a nested #include.
+// Files are merged left-to-right; the last file wins on key conflicts.
+// Run with: go test -run TestNestedIncludeMultipleFiles
+func TestNestedIncludeMultipleFiles(t *testing.T) {
+	configMap, err := GetConfig("./test-data/nested-include/multi-files-nested.cjson")
+	require.NoError(t, err)
+
+	assert.Equal(t, "myapp", configMap["app"])
+
+	services, ok := configMap["services"].(map[string]interface{})
+	require.True(t, ok, "services should be a map")
+
+	// from db.cjson only (cache.cjson has no "name")
+	assert.Equal(t, "mydb", services["name"])
+	// from cache.cjson only (db.cjson has no "ttl" or "maxConn")
+	assert.Equal(t, float64(300), services["ttl"])
+	assert.Equal(t, float64(100), services["maxConn"])
+	// "host" exists in both; cache.cjson (second) wins
+	assert.Equal(t, "cache.example.com", services["host"])
+}
+
+// TestNestedIncludeSiblings tests that multiple sibling nested objects can each have their
+// own independent #include directives that are resolved correctly.
+// Run with: go test -run TestNestedIncludeSiblings
+func TestNestedIncludeSiblings(t *testing.T) {
+	configMap, err := GetConfig("./test-data/nested-include/sibling-nested.cjson")
+	require.NoError(t, err)
+
+	assert.Equal(t, "myapp", configMap["app"])
+
+	db, ok := configMap["database"].(map[string]interface{})
+	require.True(t, ok, "database should be a map")
+	assert.Equal(t, "db.example.com", db["host"])
+	assert.Equal(t, float64(5432), db["port"])
+	assert.Equal(t, "mydb", db["name"])
+
+	server, ok := configMap["server"].(map[string]interface{})
+	require.True(t, ok, "server should be a map")
+	assert.Equal(t, "api.example.com", server["host"])
+	assert.Equal(t, true, server["tls"])
+	// local "port" overrides the included server.cjson port of 8080
+	assert.Equal(t, float64(9000), server["port"])
+}
+
+// TestNestedIncludeDeep tests #include inside a doubly-nested object.
+// Run with: go test -run TestNestedIncludeDeep
+func TestNestedIncludeDeep(t *testing.T) {
+	configMap, err := GetConfig("./test-data/nested-include/deep-nested.cjson")
+	require.NoError(t, err)
+
+	assert.Equal(t, "myapp", configMap["app"])
+
+	services, ok := configMap["services"].(map[string]interface{})
+	require.True(t, ok, "services should be a map")
+
+	backend, ok := services["backend"].(map[string]interface{})
+	require.True(t, ok, "services.backend should be a map")
+	assert.Equal(t, "db.example.com", backend["host"])
+	assert.Equal(t, float64(5432), backend["port"])
+	assert.Equal(t, "mydb", backend["name"])
+}
+
+// TestNestedIncludeWithRootInclude tests that root-level and nested #include directives
+// in the same file both work independently and do not interfere.
+// Run with: go test -run TestNestedIncludeWithRootInclude
+func TestNestedIncludeWithRootInclude(t *testing.T) {
+	configMap, err := GetConfig("./test-data/nested-include/with-root-include.cjson")
+	require.NoError(t, err)
+
+	// root-level keys from server.cjson
+	assert.Equal(t, "api.example.com", configMap["host"])
+	assert.Equal(t, float64(8080), configMap["port"])
+	assert.Equal(t, true, configMap["tls"])
+
+	// nested include from db.cjson
+	db, ok := configMap["database"].(map[string]interface{})
+	require.True(t, ok, "database should be a map")
+	assert.Equal(t, "db.example.com", db["host"])
+	assert.Equal(t, float64(5432), db["port"])
+	assert.Equal(t, "mydb", db["name"])
+}
+
+// TestNestedIncludeChained tests that an included file which itself uses root-level
+// #include has all of its own includes resolved before being merged into the parent.
+// Run with: go test -run TestNestedIncludeChained
+func TestNestedIncludeChained(t *testing.T) {
+	// chained-nested.cjson → database.#include → db-with-defaults.cjson
+	//                                              which has root #include → conn-defaults.cjson
+	configMap, err := GetConfig("./test-data/nested-include/chained-nested.cjson")
+	require.NoError(t, err)
+
+	assert.Equal(t, "myapp", configMap["app"])
+
+	db, ok := configMap["database"].(map[string]interface{})
+	require.True(t, ok, "database should be a map")
+
+	// from db-with-defaults.cjson directly
+	assert.Equal(t, "db.example.com", db["host"])
+	assert.Equal(t, float64(5432), db["port"])
+
+	// from conn-defaults.cjson via db-with-defaults.cjson's root #include
+	assert.Equal(t, float64(30), db["timeout"])
+	assert.Equal(t, float64(3), db["retries"])
+}
+
+// TestNestedIncludeErrorBadType tests that a non-array #include value inside a nested
+// object produces an immediate TypeError and does not silently skip.
+// Run with: go test -run TestNestedIncludeErrorBadType
+func TestNestedIncludeErrorBadType(t *testing.T) {
+	_, err := GetConfig("./test-data/nested-include/bad-include-type.cjson")
+	require.Error(t, err)
+
+	var typeErr *TypeError
+	require.True(t, errors.As(err, &typeErr), "expected TypeError, got: %v", err)
+	assert.Equal(t, IncludeKey, typeErr.Key)
+	assert.Equal(t, "array", typeErr.Expected)
+
+	// error message must include the key path so the caller knows where it failed
+	assert.True(t, strings.Contains(err.Error(), "database"), "error should name the failing key: %v", err)
+}
+
+// TestNestedIncludeErrorMissingFile tests that referencing a nonexistent file inside a
+// nested #include fails immediately with a FileError containing the bad path.
+// Run with: go test -run TestNestedIncludeErrorMissingFile
+func TestNestedIncludeErrorMissingFile(t *testing.T) {
+	_, err := GetConfig("./test-data/nested-include/missing-file-ref.cjson")
+	require.Error(t, err)
+
+	var fileErr *FileError
+	require.True(t, errors.As(err, &fileErr), "expected FileError, got: %v", err)
+	assert.Contains(t, fileErr.Path, "nonexistent.cjson")
+
+	// error message must include the key path so the caller knows where it failed
+	assert.True(t, strings.Contains(err.Error(), "database"), "error should name the failing key: %v", err)
 }

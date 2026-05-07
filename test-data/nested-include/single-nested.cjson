@@ -1,0 +1,7 @@
+{
+  "app": "myapp",
+  "database": {
+    "#include": ["db.cjson"],
+    "name": "override-db"
+  }
+}
