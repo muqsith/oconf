@@ -5,7 +5,7 @@ A Go library for loading configuration files in CJSON format (JSON with C-style 
 ## Features
 
 - **C-style comments**: Support for both single-line (`//`) and multi-line (`/* */`) comments in JSON files
-- **File inclusion**: Use `#include` directive to merge multiple configuration files
+- **File inclusion**: Use `#include` directive to merge multiple configuration files, at root level or inside any nested object
 - **Public/private annotations**: Mark configuration values as public using `#public` for selective exposure
 - **Multiple output formats**: Nested maps, flat maps (dot notation), and JSON strings
 - **Thread-safe**: No global state - safe for concurrent use
@@ -157,7 +157,7 @@ if err != nil {
 
 ### File Inclusion
 
-Use the `#include` directive to merge multiple configuration files. Included files are merged recursively, and values in the main file override included values.
+Use the `#include` directive to merge multiple configuration files. Included files are merged in order, and values in the current file override included values.
 
 **base.cjson:**
 ```json
@@ -181,6 +181,61 @@ Use the `#include` directive to merge multiple configuration files. Included fil
 ```
 
 Result: `server.host` is "localhost" (from base), `server.port` is 8080 (overridden), and `server.timeout` is 30 (from base).
+
+### Nested Includes
+
+`#include` works at any depth inside a config file, not just at the root. This is useful for composing specific sections from separate files.
+
+**prod.cjson:**
+```json
+{
+    "host": "db.prod.example.com",
+    "port": 5432
+}
+```
+
+**secrets.cjson:**
+```json
+{
+    "password": "s3cr3t",
+    "user": "app_user"
+}
+```
+
+**config.cjson:**
+```json
+{
+    "app": "myapp",
+    "database": {
+        "#include": [
+            "./profile-service/prod.cjson",
+            "./profile-service/secrets.cjson"
+        ],
+        "name": "mydb"
+    }
+}
+```
+
+Result:
+```json
+{
+    "app": "myapp",
+    "database": {
+        "host": "db.prod.example.com",
+        "port": 5432,
+        "password": "s3cr3t",
+        "user": "app_user",
+        "name": "mydb"
+    }
+}
+```
+
+**Rules for nested includes:**
+- Multiple files are merged left-to-right; later files win on key conflicts.
+- Local keys in the nested object override keys from any included file.
+- Include paths are relative to the directory of the file that contains the `#include`.
+- Included files can themselves use `#include` at their own root level.
+- Errors (missing file, wrong type) surface immediately with the failing key name in the message.
 
 ### Relative and Absolute Paths
 
@@ -264,7 +319,10 @@ go test -v
 
 ## Version History
 
-### v1.0.0 (Latest)
+### v1.1.0 (Latest)
+- ✅ `#include` now supported inside nested objects at any depth
+
+### v1.0.0
 - ✅ Proper error handling - all functions return errors
 - ✅ Thread-safe - no global state
 - ✅ Safe type assertions
