@@ -1,0 +1,6 @@
+{
+  "#include": ["root-base.cjson"],
+  "database": {
+    "#include": ["db.cjson"]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "#include": ["circular-b.cjson"],
+  "a": 1
+}
