@@ -46,7 +46,7 @@ func getAllConfig(configFilePath string) (map[string]interface{}, error) {
 	// Create a new context to track loaded files
 	ctx := newLoadContext()
 
-	// Mark the entry file as loaded
+	// Track the entry file on the include chain
 	absPath, err := filepath.Abs(configFilePath)
 	if err != nil {
 		return nil, &FileError{
@@ -55,7 +55,7 @@ func getAllConfig(configFilePath string) (map[string]interface{}, error) {
 			Err:  err,
 		}
 	}
-	ctx.markFileLoaded(absPath)
+	ctx.enterFile(absPath)
 
 	// Read and strip comments
 	data, err := getFileDataWithoutComments(absPath)

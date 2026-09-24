@@ -1,0 +1,9 @@
+{
+  "primary": {
+    "#include": ["db.cjson"]
+  },
+  "replica": {
+    "#include": ["db.cjson"],
+    "host": "replica.example.com"
+  }
+}

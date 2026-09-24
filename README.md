@@ -233,6 +233,8 @@ Result:
 **Rules for nested includes:**
 - Multiple files are merged left-to-right; later files win on key conflicts.
 - Local keys in the nested object override keys from any included file.
+- A nested `#include` belongs to the current file, so its values override values for the same key pulled in by a root-level `#include`.
+- The same file can be included from several nested objects; each one gets the full contents. Only circular includes (a file including itself through a chain) are skipped.
 - Include paths are relative to the directory of the file that contains the `#include`.
 - Included files can themselves use `#include` at their own root level.
 - Errors (missing file, wrong type) surface immediately with the failing key name in the message.

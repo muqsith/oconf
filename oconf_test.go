@@ -375,3 +375,53 @@ func TestNestedIncludeErrorMissingFile(t *testing.T) {
 	// error message must include the key path so the caller knows where it failed
 	assert.True(t, strings.Contains(err.Error(), "database"), "error should name the failing key: %v", err)
 }
+
+// TestNestedIncludeSameFileTwice tests that the same file can be included from two
+// different nested objects and is merged into both.
+// Run with: go test -run TestNestedIncludeSameFileTwice
+func TestNestedIncludeSameFileTwice(t *testing.T) {
+	// Map iteration order is random, so repeat to catch order-dependent failures
+	for i := 0; i < 20; i++ {
+		configMap, err := GetConfig("./test-data/nested-include/shared-nested.cjson")
+		require.NoError(t, err)
+
+		primary, ok := configMap["primary"].(map[string]interface{})
+		require.True(t, ok, "primary should be a map")
+		assert.Equal(t, "db.example.com", primary["host"])
+		assert.Equal(t, float64(5432), primary["port"])
+		assert.Equal(t, "mydb", primary["name"])
+
+		replica, ok := configMap["replica"].(map[string]interface{})
+		require.True(t, ok, "replica should be a map")
+		// local "host" overrides the included db.cjson host
+		assert.Equal(t, "replica.example.com", replica["host"])
+		assert.Equal(t, float64(5432), replica["port"])
+		assert.Equal(t, "mydb", replica["name"])
+	}
+}
+
+// TestNestedIncludeOverridesRootInclude tests that a nested #include belongs to the
+// current file and therefore overrides values pulled in by the root-level #include.
+// Run with: go test -run TestNestedIncludeOverridesRootInclude
+func TestNestedIncludeOverridesRootInclude(t *testing.T) {
+	configMap, err := GetConfig("./test-data/nested-include/root-vs-nested.cjson")
+	require.NoError(t, err)
+
+	db, ok := configMap["database"].(map[string]interface{})
+	require.True(t, ok, "database should be a map")
+	// db.cjson (nested include) wins over root-base.cjson (root include)
+	assert.Equal(t, "db.example.com", db["host"])
+	assert.Equal(t, float64(5432), db["port"])
+	assert.Equal(t, "mydb", db["name"])
+	// keys only present in the root include are still merged in
+	assert.Equal(t, "admin", db["user"])
+}
+
+// TestCircularInclude tests that files including each other do not loop forever.
+// Run with: go test -run TestCircularInclude
+func TestCircularInclude(t *testing.T) {
+	configMap, err := GetConfig("./test-data/nested-include/circular-a.cjson")
+	require.NoError(t, err)
+	assert.Equal(t, float64(1), configMap["a"])
+	assert.Equal(t, float64(2), configMap["b"])
+}

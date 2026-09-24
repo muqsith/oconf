@@ -7,26 +7,33 @@ import (
 	"path/filepath"
 )
 
-// loadContext tracks files that have been loaded to prevent circular includes
+// loadContext tracks the chain of files currently being loaded to prevent circular includes.
+// Only files on the active include chain are tracked, so the same file may still be
+// included from several independent places (e.g. two sibling nested objects).
 type loadContext struct {
-	loadedFiles map[string]bool
+	loadingFiles map[string]bool
 }
 
 // newLoadContext creates a new context for tracking loaded files
 func newLoadContext() *loadContext {
 	return &loadContext{
-		loadedFiles: make(map[string]bool),
+		loadingFiles: make(map[string]bool),
 	}
 }
 
-// markFileLoaded marks a file as loaded in the context
-func (ctx *loadContext) markFileLoaded(filePath string) {
-	ctx.loadedFiles[filePath] = true
+// enterFile marks a file as being loaded on the current include chain
+func (ctx *loadContext) enterFile(filePath string) {
+	ctx.loadingFiles[filePath] = true
 }
 
-// isFileLoaded checks if a file has already been loaded
-func (ctx *loadContext) isFileLoaded(filePath string) bool {
-	return ctx.loadedFiles[filePath]
+// leaveFile removes a file from the current include chain once it has been loaded
+func (ctx *loadContext) leaveFile(filePath string) {
+	delete(ctx.loadingFiles, filePath)
+}
+
+// isFileLoading checks if a file is already on the current include chain
+func (ctx *loadContext) isFileLoading(filePath string) bool {
+	return ctx.loadingFiles[filePath]
 }
 
 // getFromIncludes processes the #include directive and loads referenced files
@@ -52,8 +59,8 @@ func getFromIncludes(ctx *loadContext, dirPrefix string, includedFiles []interfa
 		}
 
 		// Check for circular includes
-		if ctx.isFileLoaded(resolvedPath) {
-			continue // Skip already loaded files
+		if ctx.isFileLoading(resolvedPath) {
+			continue // Skip files already on the include chain
 		}
 
 		// Load and parse the included file
@@ -110,9 +117,22 @@ func getFileDataWithoutComments(configFilePath string) ([]byte, error) {
 }
 
 // processIncludes resolves #include directives at the current map level and recursively
-// in all nested objects. Included files' keys are merged in first; the current map's
-// keys override them. Returns the updated map with all includes resolved.
+// in all nested objects. Nested objects are resolved first, so their own includes count
+// as part of the current map. Included files' keys are then merged in underneath; the
+// current map's keys override them. Returns the updated map with all includes resolved.
 func processIncludes(ctx *loadContext, dirPrefix string, m map[string]interface{}) (map[string]interface{}, error) {
+	for key, value := range m {
+		nestedMap, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		processed, err := processIncludes(ctx, dirPrefix, nestedMap)
+		if err != nil {
+			return nil, fmt.Errorf("at key '%s': %w", key, err)
+		}
+		m[key] = processed
+	}
+
 	if includes, ok := m[IncludeKey]; ok {
 		includedFiles, ok := includes.([]interface{})
 		if !ok {
@@ -130,18 +150,6 @@ func processIncludes(ctx *loadContext, dirPrefix string, m map[string]interface{
 
 		m = getMergedMap(includesConfig, m)
 		delete(m, IncludeKey)
-	}
-
-	for key, value := range m {
-		nestedMap, ok := value.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		processed, err := processIncludes(ctx, dirPrefix, nestedMap)
-		if err != nil {
-			return nil, fmt.Errorf("at key '%s': %w", key, err)
-		}
-		m[key] = processed
 	}
 
 	return m, nil
@@ -169,8 +177,9 @@ func getConfigMap(ctx *loadContext, dirPrefix string, data []byte) (map[string]i
 
 // loadConfigFile loads and parses a configuration file
 func loadConfigFile(ctx *loadContext, dirPrefix, filePath string) (map[string]interface{}, error) {
-	// Mark this file as loaded to prevent circular includes
-	ctx.markFileLoaded(filePath)
+	// Track this file on the include chain to prevent circular includes
+	ctx.enterFile(filePath)
+	defer ctx.leaveFile(filePath)
 
 	// Read and strip comments
 	data, err := getFileDataWithoutComments(filePath)
